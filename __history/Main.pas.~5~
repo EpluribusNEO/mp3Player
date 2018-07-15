@@ -1,0 +1,191 @@
+unit Main;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ComCtrls, Vcl.StdCtrls,
+  Vcl.ExtCtrls, Vcl.Buttons,
+  MPlayer{Медиа плеер}, MMSYSTEM{WAVE_MAPPER}, FileCtrl {SelectDirectory};
+
+type
+  TFrmMain = class(TForm)
+    Label1: TLabel;
+    Label2: TLabel;
+    Timer1: TTimer;
+    ListBox1: TListBox;
+    SpeedButton1: TSpeedButton;
+    SpeedButton2: TSpeedButton;
+    SpeedButton3: TSpeedButton;
+    SpeedButton4: TSpeedButton;
+    TrackBar1: TTrackBar;
+    MediaPlayer1: TMediaPlayer;
+
+    procedure FrmMain_Create(Sender: TObject);
+    procedure ListBox1_Click(Sender: TObject);
+    procedure SpeedButton1_Click(Sender: TObject);
+    procedure SpeedButton2_Click(Sender: TObject);
+    procedure SpeedButton3_Click(Sender: TObject);
+    procedure SpeedButton4_Click(Sender: TObject);
+    procedure TrackBar1_Change(Sender: TObject);
+    procedure Timer1_Timer(Sender: TObject);
+
+  private
+    { Private declarations }
+    MediaPlayer: TMediaPlayer;
+    procedure Play;
+    procedure PlayList(path: string);
+  public
+    { Public declarations }
+  end;
+
+var
+  FrmMain: TFrmMain;
+
+implementation
+
+{$R *.dfm}
+var _Path: string[255];
+var _min, _sec: Integer;
+var _volume: LongWord;
+
+///
+///
+procedure TFrmMain.FrmMain_Create(Sender: TObject);
+begin
+  MediaPlayer := TMediaPlayer.Create(self);
+  MediaPlayer.Parent := FrmMain;
+  MediaPlayer.Visible := FALSE;
+
+  SpeedButton2.AllowAllUp := TRUE;
+  SpeedButton2.GroupIndex := 1;
+
+  PlayList('');
+  ListBox1.ItemIndex := 0;
+  Label1.Caption := ListBox1.Items[ListBox1.ItemIndex];
+  TrackBar1.Position :=7;
+  _volume := (TrackBar1.Position-TrackBar1.Max+1)*6500;
+  _volume := _volume + (_volume shl 16);
+  waveOutSetVolume(WAVE_MAPPER, _volume);
+end;
+///
+///
+procedure TFrmMain.PlayList(path: string);
+  var lpBuf: PChar; sWinDir: string[128]; SearchRec: TSearchRec;
+begin
+  ListBox1.Clear;
+  if FindFirst(_Path + '*.mp3', faAnyFile, SearchRec) = 0 then
+  begin
+  ListBox1.Items.Add(SearchRec.Name);
+  while(FindNext(searchRec) = 0) do
+    ListBox1.Items.Add(SearchRec.Name);
+  end;
+ ListBox1.ItemIndex := 0;
+end;
+///
+///
+procedure TFrmMain.ListBox1_Click(Sender: TObject);
+begin
+  if not SpeedButton2.Down
+    then SpeedButton2.Down := TRUE;
+  label1.Caption := listBox1.Items[ListBox1.ItemIndex];
+  Play;
+end;
+///
+procedure TFrmMain.SpeedButton2_Click(Sender: TObject);
+begin
+  if SpeedButton2.Down then
+    Play
+  else
+    begin
+        MediaPlayer.Stop;
+        Timer1.Enabled := FALSE;
+        SpeedButton2.Down := FALSE;
+        SpeedButton2.Hint := 'Play';
+    end;
+end;
+///
+procedure TFrmMain.SpeedButton1_Click(Sender: TObject);
+begin
+  if ListBox1.ItemIndex > 0 then
+    ListBox1.ItemIndex := ListBox1.ItemIndex - 1;
+  Play;
+end;
+
+procedure TFrmMain.SpeedButton3_Click(Sender: TObject);
+begin
+  if ListBox1.ItemIndex < ListBox1.Count then
+    ListBox1.ItemIndex := ListBox1.ItemIndex + 1;
+end;
+//
+///
+procedure TFrmMain.TrackBar1_Change(Sender: TObject);
+begin
+  _volume := 6500 * (TrackBar1.Max - Trackbar1.Position);
+  _volume := _volume + (_volume shl 16);
+  waveOutSetVolume(WAVE_MAPPER, _volume);
+end;
+///
+///
+procedure TFrmMain.Play;
+begin
+  Timer1.Enabled := FALSE;
+  Label1.Caption := ListBox1.Items[ListBox1.ItemIndex];
+  MediaPlayer.FileName := _Path + ListBox1.Items[ListBox1.ItemIndex];
+
+  try
+    MediaPlayer.Open;
+  except
+    on EMCIDeviceError do
+      begin
+        ShowMessage('Ошибка обращения к файлу ' + ListBox1.Items[ListBox1.ItemIndex]);
+        SpeedButton2.Down := FALSE;
+        exit;
+      end;
+  end;
+  MediaPlayer.Play;
+  _min := 0;
+  _sec := 0;
+  Timer1.Enabled := TRUE;
+  SpeedButton2.Hint := 'Stop';
+end;
+///
+///
+procedure TFrmMain.Timer1_Timer(Sender: TObject);
+begin
+  if _sec < 59 then
+    inc(_sec)
+  else begin
+    _sec := 0;
+    inc(_min);
+  end;
+  Label2.Caption := IntToStr(_min) + ':';
+  if _sec < 10 then
+    Label2.Caption := Label2.Caption + '0'+ IntToStr(_sec)
+  else Label2.Caption := Label2.Caption + IntToStr(_sec);
+
+  if MediaPlayer.Position < MediaPlayer.Length then
+    exit;
+
+  Timer1.Enabled := FALSE;
+  MediaPlayer.Stop;
+  if ListBox1.ItemIndex < ListBox1.Count then begin
+    ListBox1.ItemIndex := ListBox1.ItemIndex + 1;
+    Play;
+  end
+end;
+ ///
+ ///
+procedure TFrmmain.SpeedButton4_Click(Sender: TObject);
+  var root: String; pwRoot: PWideChar; dir: String;
+begin
+    root := '';
+    GetMem(pwRoot, (Length(root) + 1 ) * 2);
+    pwRoot := StringToWideChar(root, pwRoot, MAX_PATH*2);
+    if not SelectDirectory('Выберите папку', pwRoot, dir) then dir := ''
+    else dir := dir + '\';
+    _Path := dir;
+    PlayList(_Path);
+end;
+
+end.
